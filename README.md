@@ -30,15 +30,6 @@ curl -fsSL https://raw.githubusercontent.com/NesanSelvan/Agents-Space/main/insta
 
 Download the latest `.exe` installer from [Releases](https://github.com/NesanSelvan/Agents-Space/releases/latest).
 
-## Development
-
-Requires [Node.js](https://nodejs.org/) v18+.
-
-```bash
-npm install
-npm run dev
-```
-
 ## Tech Stack
 
 Electron | React | TypeScript | Tailwind CSS | Monaco Editor | xterm.js | Zustand
