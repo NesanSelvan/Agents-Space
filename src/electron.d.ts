@@ -16,6 +16,8 @@ declare global {
       openExternal: (url: string) => Promise<void>
       readFile: (filePath: string) => Promise<string | null>
       writeFile: (filePath: string, content: string) => Promise<void>
+      // Menu events
+      onMenuOpenFolder: (cb: (folderPath: string) => void) => () => void
     }
   }
 }

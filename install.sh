@@ -50,21 +50,23 @@ case "$OS" in
 
     TMPDIR_PATH=$(mktemp -d)
     TMPFILE="$TMPDIR_PATH/agents-space.dmg"
-    echo "Downloading $DMG_URL..."
-    curl -fSL -o "$TMPFILE" "$DMG_URL"
+    echo "⬇  Downloading $APP_NAME $LATEST..."
+    curl -fSL --progress-bar -o "$TMPFILE" "$DMG_URL"
 
-    echo "Mounting DMG..."
-    hdiutil attach "$TMPFILE" -nobrowse -mountpoint /tmp/agents-space-mount
+    echo "📦 Mounting disk image..."
+    hdiutil attach "$TMPFILE" -nobrowse -noverify -noautoopen -mountpoint /tmp/agents-space-mount > /dev/null 2>&1
 
-    echo "Installing to /Applications..."
+    echo "📂 Copying to /Applications..."
     rm -rf "/Applications/$APP_NAME.app"
     cp -R "/tmp/agents-space-mount/$APP_NAME.app" "/Applications/"
 
-    hdiutil detach /tmp/agents-space-mount -quiet
+    echo "🧹 Cleaning up..."
+    hdiutil detach /tmp/agents-space-mount > /dev/null 2>&1
     rm -rf "$TMPDIR_PATH"
 
-    echo "✅ $APP_NAME installed to /Applications!"
-    echo "Run it from Spotlight or: open '/Applications/$APP_NAME.app'"
+    echo ""
+    echo "✅ $APP_NAME $LATEST installed successfully!"
+    echo "   Run it from Spotlight or: open '/Applications/$APP_NAME.app'"
     ;;
 
   MINGW*|MSYS*|CYGWIN*)

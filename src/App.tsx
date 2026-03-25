@@ -10,6 +10,14 @@ export default function App() {
     window.electronAPI.homedir().then(setCwd)
   }, [])
 
+  // Listen for "Open Folder" from the menu bar
+  useEffect(() => {
+    const cleanup = window.electronAPI.onMenuOpenFolder((folderPath) => {
+      setCwd(folderPath)
+    })
+    return cleanup
+  }, [])
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0f0f0f]">
       {/* Left sidebar — file tree */}

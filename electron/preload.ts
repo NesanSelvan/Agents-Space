@@ -32,4 +32,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readfile', filePath),
   writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writefile', filePath, content),
+
+  // ─── Menu events ──────────────────────────────────────────────────────────
+  onMenuOpenFolder: (cb: (folderPath: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, folderPath: string) => cb(folderPath)
+    ipcRenderer.on('menu:open-folder', handler)
+    return () => ipcRenderer.removeListener('menu:open-folder', handler)
+  },
 })
