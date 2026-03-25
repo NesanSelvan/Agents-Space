@@ -54,13 +54,13 @@ case "$OS" in
     curl -fSL -o "$TMPFILE" "$DMG_URL"
 
     echo "Mounting DMG..."
-    MOUNT_DIR=$(hdiutil attach "$TMPFILE" -nobrowse | grep "/Volumes/" | sed 's/.*\/Volumes/\/Volumes/')
+    hdiutil attach "$TMPFILE" -nobrowse -mountpoint /tmp/agents-space-mount
 
     echo "Installing to /Applications..."
     rm -rf "/Applications/$APP_NAME.app"
-    cp -R "$MOUNT_DIR/$APP_NAME.app" "/Applications/"
+    cp -R "/tmp/agents-space-mount/$APP_NAME.app" "/Applications/"
 
-    hdiutil detach "$MOUNT_DIR" -quiet
+    hdiutil detach /tmp/agents-space-mount -quiet
     rm -rf "$TMPDIR_PATH"
 
     echo "✅ $APP_NAME installed to /Applications!"
