@@ -13,7 +13,8 @@ const ZOOM_MIN = 0.33
 const ZOOM_MAX = 1.0
 
 export default function Canvas({ cwd }: { cwd: string }) {
-  const [viewport, setViewport] = useState<Viewport>({ panX: 40, panY: 40, zoom: 1 })
+  const storeViewport = useTileStore.getState().viewport
+  const [viewport, setViewport] = useState<Viewport>(storeViewport)
   const [isPanning, setIsPanning] = useState(false)
   const [spaceDown, setSpaceDown] = useState(false)
   const [showZoom, setShowZoom] = useState(false)
@@ -75,6 +76,11 @@ export default function Canvas({ cwd }: { cwd: string }) {
   }, [])
 
   const onWheel = useCallback((e: React.WheelEvent) => {
+    const target = e.target as HTMLElement | null
+    if (target?.closest('[data-terminal-tile="true"]') || target?.closest('.xterm')) {
+      return
+    }
+
     // Ctrl/Cmd + scroll → zoom
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()

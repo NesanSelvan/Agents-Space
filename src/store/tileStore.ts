@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 
 export type TileType = 'terminal' | 'file'
+export type TerminalSplitDir = 'h' | 'v'
+
+export interface TerminalPaneState {
+  id: string
+  cwd: string
+}
 
 export interface Tile {
   id: string
@@ -14,10 +20,21 @@ export interface Tile {
   title: string
   filePath?: string
   snappedZone?: SnapZone
+  panes?: TerminalPaneState[]
+  splitDir?: TerminalSplitDir
+  activePaneId?: string
+  isMinimized?: boolean
 }
 
 export interface Viewport { panX: number; panY: number; zoom: number }
 export type SnapZone = 'left' | 'right' | 'top' | 'bottom' | 'tl' | 'tr' | 'bl' | 'br' | null
+
+interface SessionData {
+  tiles: Tile[]
+  maxZIndex: number
+  viewport: Viewport
+  cwd: string
+}
 
 interface TileStore {
   tiles: Tile[]
@@ -34,6 +51,8 @@ interface TileStore {
   updateTile: (id: string, updates: Partial<Tile>) => void
   bringToFront: (id: string) => void
   clearFocus: () => void
+  restoreSession: (data: SessionData) => void
+  getSessionData: (cwd: string) => SessionData
 }
 
 export const useTileStore = create<TileStore>((set, get) => ({
@@ -51,7 +70,21 @@ export const useTileStore = create<TileStore>((set, get) => ({
     const { maxZIndex } = get()
     const newZ = maxZIndex + 1
     set(state => ({
-      tiles: [...state.tiles, { id, type: 'terminal' as TileType, x, y, width: 620, height: 400, zIndex: newZ, cwd, title: cwd.split('/').pop() || cwd }],
+      tiles: [...state.tiles, {
+        id,
+        type: 'terminal' as TileType,
+        x,
+        y,
+        width: 620,
+        height: 400,
+        zIndex: newZ,
+        cwd,
+        title: cwd.split('/').pop() || cwd,
+        panes: [{ id, cwd }],
+        splitDir: 'h',
+        activePaneId: id,
+        isMinimized: false,
+      }],
       maxZIndex: newZ,
     }))
     return id
@@ -99,5 +132,19 @@ export const useTileStore = create<TileStore>((set, get) => ({
       maxZIndex: newZ,
       focusedId: id,
     }))
+  },
+
+  restoreSession: (data) => {
+    set({
+      tiles: data.tiles,
+      maxZIndex: data.maxZIndex,
+      viewport: data.viewport,
+      focusedId: null,
+    })
+  },
+
+  getSessionData: (cwd) => {
+    const { tiles, maxZIndex, viewport } = get()
+    return { tiles, maxZIndex, viewport, cwd }
   },
 }))

@@ -32,6 +32,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readfile', filePath),
   writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writefile', filePath, content),
+  deleteFile: (targetPath: string) => ipcRenderer.invoke('fs:delete', targetPath),
+  renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('fs:rename', oldPath, newPath),
+  copyFile: (srcPath: string, destPath: string) => ipcRenderer.invoke('fs:copy', srcPath, destPath),
+  showInFolder: (targetPath: string) => ipcRenderer.invoke('fs:showInFolder', targetPath),
+
+  // ─── Session persistence ─────────────────────────────────────────────────
+  sessionGetId: () => ipcRenderer.invoke('session:getId'),
+  sessionLoad: () => ipcRenderer.invoke('session:load'),
+  sessionSave: (data: Record<string, unknown>) => ipcRenderer.invoke('session:save', data),
+  sessionLoadAll: () => ipcRenderer.invoke('session:loadAll'),
+
+  // ─── Recent folders ──────────────────────────────────────────────────────
+  recentsLoad: () => ipcRenderer.invoke('recents:load'),
+  recentsAdd: (folderPath: string) => ipcRenderer.invoke('recents:add', folderPath),
 
   // ─── Menu events ──────────────────────────────────────────────────────────
   onMenuOpenFolder: (cb: (folderPath: string) => void) => {

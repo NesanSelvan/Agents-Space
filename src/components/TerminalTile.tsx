@@ -5,12 +5,13 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { PanelLeftOpen, PanelRightOpen, PanelBottomOpen, LayoutGrid, X, Maximize2 } from 'lucide-react'
-import { Tile, useTileStore } from '../store/tileStore'
+import { SnapZone, TerminalPaneState, Tile, useTileStore } from '../store/tileStore'
 
 const SIDEBAR_W = 240
+type OccupiedSnapZone = Exclude<SnapZone, null>
 
 // Fallback order: if the preferred zone is occupied, try the next best option
-const ZONE_FALLBACKS: Record<string, string[]> = {
+const ZONE_FALLBACKS: Record<OccupiedSnapZone, OccupiedSnapZone[]> = {
   left:   ['right', 'tl', 'tr', 'bl', 'br', 'top', 'bottom'],
   right:  ['left',  'tr', 'tl', 'br', 'bl', 'top', 'bottom'],
   bottom: ['top',   'bl', 'br', 'left', 'right'],
@@ -21,17 +22,17 @@ const ZONE_FALLBACKS: Record<string, string[]> = {
   br:     ['bl',   'tr', 'tl', 'right','bottom'],
 }
 
-function resolveZone(preferred: string, currentTileId: string): string {
-  const occupied = new Set(
+function resolveZone(preferred: OccupiedSnapZone, currentTileId: string): OccupiedSnapZone {
+  const occupied = new Set<OccupiedSnapZone>(
     useTileStore.getState().tiles
       .filter(t => t.id !== currentTileId && t.snappedZone)
-      .map(t => t.snappedZone as string)
+      .map(t => t.snappedZone as OccupiedSnapZone)
   )
   if (!occupied.has(preferred)) return preferred
   return (ZONE_FALLBACKS[preferred] ?? []).find(z => !occupied.has(z)) ?? preferred
 }
 
-function snapToZone(zone: string, viewport: { panX: number; panY: number; zoom: number }) {
+function snapToZone(zone: OccupiedSnapZone, viewport: { panX: number; panY: number; zoom: number }) {
   if (!zone) return null
   const cw = window.innerWidth - SIDEBAR_W
   const ch = window.innerHeight
@@ -57,7 +58,7 @@ function snapToZone(zone: string, viewport: { panX: number; panY: number; zoom: 
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface Pane { id: string; cwd: string }
+interface Pane extends TerminalPaneState {}
 type SplitDir = 'h' | 'v'
 
 interface Props { tile: Tile; onFocus: () => void }
@@ -105,7 +106,6 @@ function TerminalPane({
   const termInstance = useRef<Terminal | null>(null)
   const fitAddon = useRef<FitAddon | null>(null)
 
-  // Boot terminal
   useEffect(() => {
     if (!termRef.current || termInstance.current) return
     const term = new Terminal({
@@ -138,7 +138,6 @@ function TerminalPane({
     } catch { /* fallback */ }
     fitAddon.current = fit
     termInstance.current = term
-    // Delay initial fit so flexbox layout is complete before measuring
     setTimeout(() => {
       try { fit.fit() } catch { /* ignore */ }
       window.electronAPI.ptyCreate({ id: pane.id, cwd: pane.cwd, cols: term.cols, rows: term.rows })
@@ -155,7 +154,6 @@ function TerminalPane({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pane.id])
 
-  // Refit on resize
   useEffect(() => {
     const t = setTimeout(() => {
       try {
@@ -213,7 +211,6 @@ function TerminalPane({
         </div>
       </div>
 
-      {/* xterm — position:relative required by xterm.js to contain the WebGL canvas */}
       <div
         ref={termRef}
         className="flex-1 min-h-0"
@@ -279,15 +276,25 @@ function PaneContainer({
 
 // ─── TerminalTile ─────────────────────────────────────────────────────────────
 export default function TerminalTile({ tile, onFocus }: Props) {
-  const [panes, setPanes] = useState<Pane[]>([{ id: tile.id, cwd: tile.cwd }])
-  const [splitDir, setSplitDir] = useState<SplitDir>('h')
-  const [activePaneId, setActivePaneId] = useState(tile.id)
+  const [panes, setPanes] = useState<Pane[]>(tile.panes?.length ? tile.panes : [{ id: tile.id, cwd: tile.cwd }])
+  const [splitDir, setSplitDir] = useState<SplitDir>(tile.splitDir ?? 'h')
+  const [activePaneId, setActivePaneId] = useState(tile.activePaneId ?? (tile.panes?.[0]?.id || tile.id))
   const [isInteracting, setIsInteracting] = useState(false)
-  const [isMinimized, setIsMinimized] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(tile.isMinimized ?? false)
   const [showGreenMenu, setShowGreenMenu] = useState(false)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const prevHeightRef = useRef(tile.height)
   const { updateTile, removeTile, focusedId, viewport } = useTileStore()
   const isFocused = focusedId === tile.id
+
+  useEffect(() => {
+    updateTile(tile.id, {
+      panes,
+      splitDir,
+      activePaneId,
+      isMinimized,
+    })
+  }, [activePaneId, isMinimized, panes, splitDir, tile.id, updateTile])
 
   // Close green menu on outside click
   useEffect(() => {
@@ -394,6 +401,7 @@ export default function TerminalTile({ tile, onFocus }: Props) {
   return (
     <div
       className="absolute rounded-xl overflow-hidden flex flex-col"
+      data-terminal-tile="true"
       style={{
         left: tile.x, top: tile.y, width: tile.width, height: tile.height,
         zIndex: tile.zIndex, willChange: 'transform', background: '#0d0d0d',
@@ -411,7 +419,7 @@ export default function TerminalTile({ tile, onFocus }: Props) {
         {/* Traffic lights */}
         <div className="relative flex items-center gap-1.5 flex-shrink-0" onMouseDown={e => e.stopPropagation()}>
           <button className="w-3 h-3 rounded-full bg-[#ff5f57] hover:brightness-125"
-            onClick={() => removeTile(tile.id)} />
+            onClick={() => setShowCloseConfirm(true)} />
           <button className="w-3 h-3 rounded-full bg-[#febc2e] hover:brightness-125"
             onClick={handleMinimize}
             title={isMinimized ? 'Restore' : 'Minimize'} />
@@ -490,6 +498,48 @@ export default function TerminalTile({ tile, onFocus }: Props) {
       {!isMinimized && RESIZE_HANDLES.map(({ dir, style }) => (
         <div key={dir} className="absolute z-50" style={style} onMouseDown={onResizeMouseDown(dir)} />
       ))}
+
+      {/* Close confirmation dialog */}
+      {showCloseConfirm && (
+        <div
+          className="absolute inset-0 flex items-center justify-center z-[10000]"
+          style={{ background: 'rgba(0,0,0,0.6)', borderRadius: 'inherit' }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div
+            className="rounded-lg p-4 flex flex-col gap-3 shadow-2xl"
+            style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.12)', minWidth: 240, maxWidth: 300 }}
+          >
+            <p className="text-sm text-white/80 text-center">
+              Close this terminal session?
+            </p>
+            <p className="text-xs text-white/40 text-center">
+              {panes.length > 1
+                ? `${panes.length} active panes will be terminated.`
+                : 'The running session will be terminated.'}
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                className="flex-1 px-3 py-1.5 rounded-md text-xs text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
+                onClick={() => setShowCloseConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 px-3 py-1.5 rounded-md text-xs text-red-400 bg-red-500/15 hover:bg-red-500/30 transition-colors"
+                onClick={() => {
+                  for (const pane of panes) {
+                    window.electronAPI.ptyKill(pane.id)
+                  }
+                  removeTile(tile.id)
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

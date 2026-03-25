@@ -16,6 +16,18 @@ declare global {
       openExternal: (url: string) => Promise<void>
       readFile: (filePath: string) => Promise<string | null>
       writeFile: (filePath: string, content: string) => Promise<void>
+      deleteFile: (targetPath: string) => Promise<void>
+      renameFile: (oldPath: string, newPath: string) => Promise<void>
+      copyFile: (srcPath: string, destPath: string) => Promise<void>
+      showInFolder: (targetPath: string) => Promise<void>
+      // Session persistence
+      sessionGetId: () => Promise<string | null>
+      sessionLoad: () => Promise<Record<string, unknown> | null>
+      sessionSave: (data: Record<string, unknown>) => Promise<void>
+      sessionLoadAll: () => Promise<Array<{ id: string; cwd: string; tiles: unknown[]; maxZIndex: number; viewport: { panX: number; panY: number; zoom: number }; fileTreeExpandedPaths?: string[] }>>
+      // Recent folders
+      recentsLoad: () => Promise<string[]>
+      recentsAdd: (folderPath: string) => Promise<void>
       // Menu events
       onMenuOpenFolder: (cb: (folderPath: string) => void) => () => void
     }

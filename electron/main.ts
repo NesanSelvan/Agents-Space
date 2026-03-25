@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, webContents as electronWebContents } from 'electron'
 import { join } from 'path'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -17,7 +17,69 @@ if (process.platform === 'darwin' && app.dock) {
 
 const ptyManager = new PtyManager()
 
-function createWindow() {
+// ─── Multi-window session persistence ─────────────────────────────────────────
+const sessionsPath = path.join(app.getPath('userData'), 'sessions.json')
+
+interface WindowSession {
+  id: string
+  tiles: unknown[]
+  maxZIndex: number
+  viewport: { panX: number; panY: number; zoom: number }
+  cwd: string
+  fileTreeExpandedPaths?: string[]
+}
+
+function loadAllSessions(): WindowSession[] {
+  try {
+    const data = JSON.parse(fs.readFileSync(sessionsPath, 'utf-8'))
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
+function saveAllSessions(sessions: WindowSession[]) {
+  try {
+    fs.writeFileSync(sessionsPath, JSON.stringify(sessions), 'utf-8')
+  } catch { /* ignore */ }
+}
+
+// ─── Recent folders tracking ──────────────────────────────────────────────────
+const recentsPath = path.join(app.getPath('userData'), 'recents.json')
+const MAX_RECENTS = 10
+
+function loadRecents(): string[] {
+  try {
+    const data = JSON.parse(fs.readFileSync(recentsPath, 'utf-8'))
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
+function addRecent(folderPath: string) {
+  const recents = loadRecents().filter(r => r !== folderPath)
+  recents.unshift(folderPath)
+  if (recents.length > MAX_RECENTS) recents.length = MAX_RECENTS
+  try {
+    fs.writeFileSync(recentsPath, JSON.stringify(recents), 'utf-8')
+  } catch { /* ignore */ }
+}
+
+// Track which BrowserWindow owns which session ID
+const windowSessionMap = new Map<number, string>() // webContents.id → sessionId
+
+// Track all managed windows for hide/show
+const managedWindows: BrowserWindow[] = []
+
+// Track which PTY IDs belong to which window (webContents.id → Set of pty ids)
+const windowPtyMap = new Map<number, Set<string>>()
+
+// ─── Window creation ──────────────────────────────────────────────────────────
+
+let nextSessionId = 0
+
+function createWindow(sessionId?: string): BrowserWindow {
   const iconPath = app.isPackaged
     ? join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon.png')
     : join(__dirname, '../../resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png')
@@ -39,6 +101,45 @@ function createWindow() {
     },
   })
 
+  // Assign a session ID to this window
+  const sid = sessionId ?? `session-${Date.now()}-${nextSessionId++}`
+  const webContentsId = win.webContents.id
+  windowSessionMap.set(webContentsId, sid)
+  managedWindows.push(win)
+
+  // Warn before closing if terminals are running
+  win.on('close', (e) => {
+    const ptyIds = windowPtyMap.get(webContentsId)
+    if (ptyIds && ptyIds.size > 0) {
+      const choice = dialog.showMessageBoxSync(win, {
+        type: 'warning',
+        buttons: ['Close', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Close Window',
+        message: 'Terminal sessions are still running',
+        detail: `${ptyIds.size} active terminal session${ptyIds.size > 1 ? 's' : ''} will be terminated.`,
+      })
+      if (choice === 1) {
+        e.preventDefault()
+        return
+      }
+    }
+  })
+
+  win.on('closed', () => {
+    const ptyIds = windowPtyMap.get(webContentsId)
+    if (ptyIds) {
+      for (const id of ptyIds) {
+        ptyManager.kill(id)
+      }
+    }
+    windowSessionMap.delete(webContentsId)
+    windowPtyMap.delete(webContentsId)
+    const idx = managedWindows.indexOf(win)
+    if (idx >= 0) managedWindows.splice(idx, 1)
+  })
+
   // Load dev server or built file
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -54,12 +155,69 @@ function createWindow() {
   return win
 }
 
+function showAllWindows() {
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.show()
+  }
+  for (const win of managedWindows) {
+    if (!win.isDestroyed()) {
+      win.show()
+    }
+  }
+}
+
+// Helper: get the BrowserWindow from an IPC event
+function getCallerWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(event.sender)
+}
+
 app.whenReady().then(() => {
-  const win = createWindow()
+  // Restore only the most recent session (last saved)
+  const savedSessions = loadAllSessions()
+  if (savedSessions.length > 0) {
+    const lastSession = savedSessions[savedSessions.length - 1]
+    createWindow(lastSession.id)
+  } else {
+    createWindow()
+  }
 
   // ─── Application menu ─────────────────────────────────────────────────────
   const isMac = process.platform === 'darwin'
-  const template: Electron.MenuItemConstructorOptions[] = [
+
+  function buildRecentSubmenu(): Electron.MenuItemConstructorOptions[] {
+    const recents = loadRecents()
+    if (recents.length === 0) {
+      return [{ label: 'No Recent Folders', enabled: false }]
+    }
+    return [
+      ...recents.map(folderPath => ({
+        label: folderPath.split('/').pop() || folderPath,
+        sublabel: folderPath,
+        click: () => {
+          const focusedWin = BrowserWindow.getFocusedWindow()
+          if (focusedWin) {
+            focusedWin.webContents.send('menu:open-folder', folderPath)
+          } else {
+            const newWin = createWindow()
+            newWin.webContents.once('did-finish-load', () => {
+              newWin.webContents.send('menu:open-folder', folderPath)
+            })
+          }
+        },
+      })),
+      { type: 'separator' as const },
+      {
+        label: 'Clear Recent',
+        click: () => {
+          try { fs.writeFileSync(recentsPath, '[]', 'utf-8') } catch { /* ignore */ }
+          rebuildMenu()
+        },
+      },
+    ]
+  }
+
+  function buildMenuTemplate(): Electron.MenuItemConstructorOptions[] {
+    return [
     ...(isMac ? [{
       label: app.name,
       submenu: [
@@ -92,13 +250,21 @@ app.whenReady().then(() => {
           label: 'Open Folder...',
           accelerator: 'CmdOrCtrl+O',
           click: async () => {
-            const result = await dialog.showOpenDialog(win, {
+            const focusedWin = BrowserWindow.getFocusedWindow()
+            if (!focusedWin) return
+            const result = await dialog.showOpenDialog(focusedWin, {
               properties: ['openDirectory'],
             })
             if (!result.canceled && result.filePaths[0]) {
-              win.webContents.send('menu:open-folder', result.filePaths[0])
+              addRecent(result.filePaths[0])
+              focusedWin.webContents.send('menu:open-folder', result.filePaths[0])
+              rebuildMenu()
             }
           },
+        },
+        {
+          label: 'Open Recent',
+          submenu: buildRecentSubmenu(),
         },
         { type: 'separator' },
         {
@@ -147,15 +313,75 @@ app.whenReady().then(() => {
         ]),
       ],
     },
-  ]
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  ]}
+
+  function rebuildMenu() {
+    Menu.setApplicationMenu(Menu.buildFromTemplate(buildMenuTemplate()))
+  }
+
+  rebuildMenu()
+
+  // ─── Session persistence IPC ────────────────────────────────────────────────
+
+  // Each window gets its own session ID
+  ipcMain.handle('session:getId', (event) => {
+    return windowSessionMap.get(event.sender.id) ?? null
+  })
+
+  // Load this window's session from the saved sessions array
+  ipcMain.handle('session:load', (event) => {
+    const sessionId = windowSessionMap.get(event.sender.id)
+    if (!sessionId) return null
+    const all = loadAllSessions()
+    return all.find(s => s.id === sessionId) ?? null
+  })
+
+  // Save this window's session (upsert, deduplicate by cwd)
+  ipcMain.handle('session:save', (event, data: WindowSession) => {
+    const sessionId = windowSessionMap.get(event.sender.id)
+    if (!sessionId) return
+    data.id = sessionId
+    // Remove any other sessions with the same cwd to prevent duplicates
+    const all = loadAllSessions().filter(s => s.id === sessionId || s.cwd !== data.cwd)
+    const idx = all.findIndex(s => s.id === sessionId)
+    if (idx >= 0) {
+      all[idx] = data
+    } else {
+      all.push(data)
+    }
+    saveAllSessions(all)
+  })
+
+  // Load all sessions (for listing recent windows)
+  ipcMain.handle('session:loadAll', () => loadAllSessions())
+
+  // Recent folders
+  ipcMain.handle('recents:load', () => loadRecents())
+  ipcMain.handle('recents:add', (_, folderPath: string) => {
+    addRecent(folderPath)
+    rebuildMenu()
+  })
 
   // ─── PTY handlers ─────────────────────────────────────────────────────────
 
-  ipcMain.handle('pty:create', (_, { id, cwd, cols, rows }) => {
+  ipcMain.handle('pty:create', (event, { id, cwd, cols, rows }) => {
+    const senderId = event.sender.id
+    // Track this PTY belongs to this window
+    if (!windowPtyMap.has(senderId)) windowPtyMap.set(senderId, new Set())
+    windowPtyMap.get(senderId)!.add(id)
+
     ptyManager.create(id, { cwd, cols, rows }, (data) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send(`pty:data:${id}`, data)
+      const ptyIds = windowPtyMap.get(senderId)
+      const targetWebContents = electronWebContents.fromId(senderId)
+
+      if (!ptyIds?.has(id) || !targetWebContents || targetWebContents.isDestroyed()) {
+        return
+      }
+
+      try {
+        targetWebContents.send(`pty:data:${id}`, data)
+      } catch {
+        // Renderer is already tearing down. Ignore late PTY output.
       }
     })
   })
@@ -168,8 +394,11 @@ app.whenReady().then(() => {
     ptyManager.resize(id, cols, rows)
   })
 
-  ipcMain.handle('pty:kill', (_, { id }) => {
+  ipcMain.handle('pty:kill', (event, { id }) => {
     ptyManager.kill(id)
+    // Remove from tracking
+    const ptyIds = windowPtyMap.get(event.sender.id)
+    if (ptyIds) ptyIds.delete(id)
   })
 
   // ─── File system handlers ─────────────────────────────────────────────────
@@ -201,8 +430,31 @@ app.whenReady().then(() => {
     await fs.promises.writeFile(filePath, content, 'utf-8')
   })
 
-  ipcMain.handle('dialog:openFolder', async () => {
-    const result = await dialog.showOpenDialog(win, {
+  ipcMain.handle('fs:delete', async (_, targetPath: string) => {
+    await fs.promises.rm(targetPath, { recursive: true, force: true })
+  })
+
+  ipcMain.handle('fs:rename', async (_, oldPath: string, newPath: string) => {
+    await fs.promises.rename(oldPath, newPath)
+  })
+
+  ipcMain.handle('fs:copy', async (_, srcPath: string, destPath: string) => {
+    const stat = await fs.promises.stat(srcPath)
+    if (stat.isDirectory()) {
+      await fs.promises.cp(srcPath, destPath, { recursive: true })
+    } else {
+      await fs.promises.copyFile(srcPath, destPath)
+    }
+  })
+
+  ipcMain.handle('fs:showInFolder', (_, targetPath: string) => {
+    shell.showItemInFolder(targetPath)
+  })
+
+  ipcMain.handle('dialog:openFolder', async (event) => {
+    const callerWin = getCallerWindow(event)
+    if (!callerWin) return null
+    const result = await dialog.showOpenDialog(callerWin, {
       properties: ['openDirectory'],
     })
     return result.canceled ? null : result.filePaths[0]
@@ -213,7 +465,14 @@ app.whenReady().then(() => {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    const allWindows = managedWindows.filter(w => !w.isDestroyed())
+    if (allWindows.length > 0) {
+      showAllWindows()
+    } else {
+      const savedSessions = loadAllSessions()
+      const lastSession = savedSessions[savedSessions.length - 1]
+      createWindow(lastSession?.id)
+    }
   })
 })
 
