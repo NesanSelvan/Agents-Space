@@ -65,22 +65,34 @@ function TreeNode({
   const iconColor = getIconColor(entry.name, entry.isDirectory)
   const { addFileTile } = useTileStore()
 
+  const loadChildren = useCallback(async () => {
+    if (!entry.isDirectory) return
+    const raw: FileEntry[] = await window.electronAPI.readDir(entry.path)
+    setChildren(
+      raw.sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+    )
+  }, [entry.path, entry.isDirectory])
+
   const toggle = useCallback(async () => {
     if (!entry.isDirectory) {
       addFileTile(entry.path, entry.name)
       return
     }
     if (!expanded) {
-      const raw: FileEntry[] = await window.electronAPI.readDir(entry.path)
-      setChildren(
-        raw.sort((a, b) => {
-          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-          return a.name.localeCompare(b.name)
-        })
-      )
+      await loadChildren()
     }
     setExpanded(e => !e)
-  }, [entry, expanded])
+  }, [entry, expanded, loadChildren])
+
+  // Auto-sync expanded directories
+  useEffect(() => {
+    if (!expanded || !entry.isDirectory) return
+    const interval = setInterval(loadChildren, 2000)
+    return () => clearInterval(interval)
+  }, [expanded, entry.isDirectory, loadChildren])
 
   const icon = entry.isDirectory ? (
     expanded

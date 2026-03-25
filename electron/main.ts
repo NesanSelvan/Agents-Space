@@ -61,7 +61,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle('pty:create', (_, { id, cwd, cols, rows }) => {
     ptyManager.create(id, { cwd, cols, rows }, (data) => {
-      win.webContents.send(`pty:data:${id}`, data)
+      if (!win.isDestroyed()) {
+        win.webContents.send(`pty:data:${id}`, data)
+      }
     })
   })
 
