@@ -48,7 +48,8 @@ case "$OS" in
       exit 1
     fi
 
-    TMPFILE=$(mktemp /tmp/agents-space-XXXXXX.dmg)
+    TMPDIR_PATH=$(mktemp -d)
+    TMPFILE="$TMPDIR_PATH/agents-space.dmg"
     echo "Downloading $DMG_URL..."
     curl -fSL -o "$TMPFILE" "$DMG_URL"
 
@@ -60,7 +61,7 @@ case "$OS" in
     cp -R "$MOUNT_DIR/$APP_NAME.app" "/Applications/"
 
     hdiutil detach "$MOUNT_DIR" -quiet
-    rm -f "$TMPFILE"
+    rm -rf "$TMPDIR_PATH"
 
     echo "✅ $APP_NAME installed to /Applications!"
     echo "Run it from Spotlight or: open '/Applications/$APP_NAME.app'"
