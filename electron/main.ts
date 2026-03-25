@@ -9,15 +9,18 @@ app.setName('Agents Space')
 
 // Set dock icon on macOS (needed for dev mode)
 if (process.platform === 'darwin' && app.dock) {
-  app.dock.setIcon(join(__dirname, '../../resources/icon.png'))
+  const dockIconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(__dirname, '../../resources/icon.png')
+  app.dock.setIcon(dockIconPath)
 }
 
 const ptyManager = new PtyManager()
 
 function createWindow() {
-  const iconPath = process.platform === 'win32'
-    ? join(__dirname, '../../resources/icon.ico')
-    : join(__dirname, '../../resources/icon.png')
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon.png')
+    : join(__dirname, '../../resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png')
 
   const win = new BrowserWindow({
     width: 1400,
