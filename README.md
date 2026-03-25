@@ -4,56 +4,38 @@ Infinite canvas workspace for AI agents — a lightweight desktop app built with
 
 ![App Icon](resources/icon.png)
 
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) (v18 or later)
-- npm (comes with Node.js)
-- Git
-
-## Installation
+## Install
 
 ### macOS
 
 ```bash
-git clone https://github.com/NesanSelvan/Agent-Space.git
-cd Agent-Space
+curl -fsSL https://raw.githubusercontent.com/NesanSelvan/Agents-Space/main/install.sh | bash
+```
+
+### Windows (Git Bash / PowerShell)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NesanSelvan/Agents-Space/main/install.sh | bash
+```
+
+Or download the latest `.exe` installer directly from [Releases](https://github.com/NesanSelvan/Agents-Space/releases/latest).
+
+## Build from Source
+
+Requires [Node.js](https://nodejs.org/) v18+ and npm.
+
+```bash
+git clone https://github.com/NesanSelvan/Agents-Space.git
+cd Agents-Space
 npm install
-npm run dev
 ```
-
-To build a `.dmg` installer:
-
-```bash
-npm run package:mac
-```
-
-The installer will be in the `dist/` folder.
-
-### Windows
-
-```bash
-git clone https://github.com/NesanSelvan/Agent-Space.git
-cd Agent-Space
-npm install
-npm run dev
-```
-
-To build a Windows `.exe` installer:
-
-```bash
-npm run package:win
-```
-
-The installer will be in the `dist/` folder.
-
-## Scripts
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start the app in development mode |
-| `npm run build` | Build the app for production |
+| `npm run dev` | Start in development mode |
+| `npm run build` | Build for production |
 | `npm run package:mac` | Package as macOS `.dmg` |
-| `npm run package:win` | Package as Windows `.exe` (NSIS) |
+| `npm run package:win` | Package as Windows `.exe` |
 
 ## Tech Stack
 
