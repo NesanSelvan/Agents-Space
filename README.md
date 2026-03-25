@@ -1,48 +1,60 @@
-# Agents Space
+<p align="center">
+  <img src="https://raw.githubusercontent.com/NesanSelvan/Agents-Space/main/resources/icon.png" width="120" alt="Agents Space Icon" />
+</p>
 
-Infinite canvas workspace for AI agents — a lightweight desktop app built with Electron, React, and TypeScript.
+<h1 align="center">Agents Space</h1>
 
-![App Icon](resources/icon.png)
+<p align="center">
+  Infinite canvas workspace for AI agents — run multiple terminals, edit files, and orchestrate AI coding agents side by side.
+</p>
+
+<p align="center">
+  <a href="https://github.com/NesanSelvan/Agents-Space/releases/latest">Download</a> &nbsp;·&nbsp;
+  <a href="https://github.com/NesanSelvan/Agents-Space/issues">Issues</a> &nbsp;·&nbsp;
+  <a href="https://github.com/NesanSelvan/Agents-Space/blob/main/LICENSE">MIT License</a>
+</p>
+
+---
+
+![Screenshot](https://raw.githubusercontent.com/NesanSelvan/Agents-Space/main/resources/screenshot.png)
 
 ## Install
 
-### macOS
+**macOS**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NesanSelvan/Agents-Space/main/install.sh | bash
 ```
 
-### Windows (Git Bash / PowerShell)
+**Windows**
+
+Download the latest `.exe` installer from [Releases](https://github.com/NesanSelvan/Agents-Space/releases/latest).
+
+## Development
+
+Requires [Node.js](https://nodejs.org/) v18+.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/NesanSelvan/Agents-Space/main/install.sh | bash
-```
-
-Or download the latest `.exe` installer directly from [Releases](https://github.com/NesanSelvan/Agents-Space/releases/latest).
-
-## Build from Source
-
-Requires [Node.js](https://nodejs.org/) v18+ and npm.
-
-```bash
-git clone https://github.com/NesanSelvan/Agents-Space.git
-cd Agents-Space
 npm install
+npm run dev
 ```
-
-| Command | Description |
-|---|---|
-| `npm run dev` | Start in development mode |
-| `npm run build` | Build for production |
-| `npm run package:mac` | Package as macOS `.dmg` |
-| `npm run package:win` | Package as Windows `.exe` |
 
 ## Tech Stack
 
-- **Electron** — Desktop shell
-- **React** — UI framework
-- **TypeScript** — Type safety
-- **Tailwind CSS** — Styling
-- **Monaco Editor** — Code editing
-- **xterm.js** — Integrated terminal
-- **Zustand** — State management
+Electron | React | TypeScript | Tailwind CSS | Monaco Editor | xterm.js | Zustand
+
+## Features
+
+- **Infinite Canvas** — Pan and zoom freely. Arrange tiles however you like.
+- **Multiple Terminals** — Spawn independent terminal sessions with full PTY support.
+- **File Explorer** — Browse project files with auto-syncing sidebar.
+- **Code Editor** — Edit files with Monaco Editor and syntax highlighting for 20+ languages.
+- **Window Snapping** — Drag tiles to edges to snap into halves, quarters, or full-screen.
+- **Drag, Resize, Stack** — Move, resize, and layer any tile freely.
+- **Open Folder** — Switch working directory from the menu bar or sidebar.
+- **Multi-Window** — Open multiple app windows.
+- **Cross-Platform** — macOS and Windows.
+
+## License
+
+[MIT](LICENSE)
