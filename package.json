@@ -2,6 +2,7 @@
   "name": "agent-space",
   "version": "0.1.0",
   "description": "Infinite canvas workspace for AI agents — lightweight Collaborator alternative",
+  "license": "MIT",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
