@@ -63,7 +63,20 @@ app.whenReady().then(() => {
     ...(isMac ? [{
       label: app.name,
       submenu: [
-        { role: 'about' as const },
+        {
+          label: `About ${app.name}`,
+          click: () => {
+            dialog.showMessageBox({
+              type: 'info',
+              title: `About ${app.name}`,
+              message: app.name,
+              detail: `Version ${app.getVersion()}\n\nInfinite canvas workspace for AI agents — run terminals, edit code, and orchestrate coding agents side by side.\n\nBuilt by Nesan Selvan\nhttps://nesanselvan.netlify.app\nhttps://github.com/NesanSelvan\n\nMIT License`,
+              icon: app.isPackaged
+                ? path.join(process.resourcesPath, 'icon.png')
+                : path.join(__dirname, '../../resources/icon.png'),
+            })
+          },
+        } as Electron.MenuItemConstructorOptions,
         { type: 'separator' as const },
         { role: 'hide' as const },
         { role: 'hideOthers' as const },
