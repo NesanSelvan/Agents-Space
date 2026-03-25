@@ -53,7 +53,7 @@ case "$OS" in
     curl -fSL -o "$TMPFILE" "$DMG_URL"
 
     echo "Mounting DMG..."
-    MOUNT_DIR=$(hdiutil attach "$TMPFILE" -nobrowse | tail -1 | awk '{print $NF}')
+    MOUNT_DIR=$(hdiutil attach "$TMPFILE" -nobrowse | grep "/Volumes/" | sed 's/.*\/Volumes/\/Volumes/')
 
     echo "Installing to /Applications..."
     rm -rf "/Applications/$APP_NAME.app"
