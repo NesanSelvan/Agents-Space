@@ -74,6 +74,40 @@ const managedWindows: BrowserWindow[] = []
 
 // Track which PTY IDs belong to which window (webContents.id → Set of pty ids)
 const windowPtyMap = new Map<number, Set<string>>()
+const fileWatchers = new Map<string, fs.FSWatcher>()
+const fileWatchSubscribers = new Map<number, Set<string>>()
+
+function watcherKey(senderId: number, filePath: string) {
+  return `${senderId}:${filePath}`
+}
+
+function stopWatchingFile(senderId: number, filePath: string) {
+  const key = watcherKey(senderId, filePath)
+  const watcher = fileWatchers.get(key)
+  if (watcher) {
+    watcher.close()
+    fileWatchers.delete(key)
+  }
+  const subscriptions = fileWatchSubscribers.get(senderId)
+  if (subscriptions) {
+    subscriptions.delete(filePath)
+    if (subscriptions.size === 0) fileWatchSubscribers.delete(senderId)
+  }
+}
+
+function stopWatchingAllFiles(senderId: number) {
+  const subscriptions = fileWatchSubscribers.get(senderId)
+  if (!subscriptions) return
+  for (const filePath of subscriptions) {
+    const key = watcherKey(senderId, filePath)
+    const watcher = fileWatchers.get(key)
+    if (watcher) {
+      watcher.close()
+      fileWatchers.delete(key)
+    }
+  }
+  fileWatchSubscribers.delete(senderId)
+}
 
 // ─── Window creation ──────────────────────────────────────────────────────────
 
@@ -134,6 +168,7 @@ function createWindow(sessionId?: string): BrowserWindow {
         ptyManager.kill(id)
       }
     }
+    stopWatchingAllFiles(webContentsId)
     windowSessionMap.delete(webContentsId)
     windowPtyMap.delete(webContentsId)
     const idx = managedWindows.indexOf(win)
@@ -449,6 +484,37 @@ app.whenReady().then(() => {
 
   ipcMain.handle('fs:showInFolder', (_, targetPath: string) => {
     shell.showItemInFolder(targetPath)
+  })
+
+  ipcMain.handle('fs:watch:start', (event, filePath: string) => {
+    const senderId = event.sender.id
+    const key = watcherKey(senderId, filePath)
+    if (fileWatchers.has(key)) return
+
+    try {
+      const watcher = fs.watch(filePath, { persistent: false }, () => {
+        const targetWebContents = electronWebContents.fromId(senderId)
+        if (!targetWebContents || targetWebContents.isDestroyed()) {
+          stopWatchingFile(senderId, filePath)
+          return
+        }
+        targetWebContents.send('fs:file-changed', filePath)
+      })
+
+      watcher.on('error', () => {
+        stopWatchingFile(senderId, filePath)
+      })
+
+      fileWatchers.set(key, watcher)
+      if (!fileWatchSubscribers.has(senderId)) fileWatchSubscribers.set(senderId, new Set())
+      fileWatchSubscribers.get(senderId)!.add(filePath)
+    } catch {
+      stopWatchingFile(senderId, filePath)
+    }
+  })
+
+  ipcMain.handle('fs:watch:stop', (event, filePath: string) => {
+    stopWatchingFile(event.sender.id, filePath)
   })
 
   ipcMain.handle('dialog:openFolder', async (event) => {

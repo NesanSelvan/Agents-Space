@@ -106,6 +106,39 @@ function TerminalPane({
   const termInstance = useRef<Terminal | null>(null)
   const fitAddon = useRef<FitAddon | null>(null)
 
+  const captureScrollState = useCallback(() => {
+    const term = termInstance.current
+    if (!term) return null
+    const buffer = term.buffer.active
+    return {
+      viewportY: buffer.viewportY,
+      wasNearBottom: buffer.baseY - buffer.viewportY <= 1,
+    }
+  }, [])
+
+  const restoreScrollState = useCallback(
+    (state: ReturnType<typeof captureScrollState>) => {
+      if (!state) return
+      const term = termInstance.current
+      if (!term) return
+      if (state.wasNearBottom) {
+        term.scrollToBottom()
+        return
+      }
+      term.scrollToLine(state.viewportY)
+    },
+    []
+  )
+
+  const preserveViewportScroll = useCallback(
+    (work: () => void) => {
+      const scrollState = captureScrollState()
+      work()
+      requestAnimationFrame(() => restoreScrollState(scrollState))
+    },
+    [captureScrollState, restoreScrollState]
+  )
+
   useEffect(() => {
     if (!termRef.current || termInstance.current) return
     const term = new Terminal({
@@ -139,11 +172,16 @@ function TerminalPane({
     fitAddon.current = fit
     termInstance.current = term
     setTimeout(() => {
-      try { fit.fit() } catch { /* ignore */ }
+      preserveViewportScroll(() => {
+        try { fit.fit() } catch { /* ignore */ }
+      })
       window.electronAPI.ptyCreate({ id: pane.id, cwd: pane.cwd, cols: term.cols, rows: term.rows })
     }, 50)
     term.onData(data => window.electronAPI.ptyWrite(pane.id, data))
-    const cleanup = window.electronAPI.onPtyData(pane.id, data => term.write(data))
+    const cleanup = window.electronAPI.onPtyData(pane.id, data => {
+      const scrollState = captureScrollState()
+      term.write(data, () => restoreScrollState(scrollState))
+    })
     return () => {
       cleanup()
       window.electronAPI.ptyKill(pane.id)
@@ -152,24 +190,34 @@ function TerminalPane({
       fitAddon.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pane.id])
+  }, [captureScrollState, pane.cwd, pane.id, preserveViewportScroll, restoreScrollState])
 
   useEffect(() => {
     const t = setTimeout(() => {
-      try {
-        fitAddon.current?.fit()
-        const term = termInstance.current
-        if (term) window.electronAPI.ptyResize(pane.id, term.cols, term.rows)
-      } catch { /* ignore */ }
+      preserveViewportScroll(() => {
+        try {
+          fitAddon.current?.fit()
+          const term = termInstance.current
+          if (term) window.electronAPI.ptyResize(pane.id, term.cols, term.rows)
+        } catch { /* ignore */ }
+      })
     }, 50)
     return () => clearTimeout(t)
-  }, [width, height, pane.id])
+  }, [height, pane.id, preserveViewportScroll, width])
+
+  const handleActivate = useCallback(() => {
+    preserveViewportScroll(() => {
+      onActivate()
+      const textarea = termRef.current?.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement | null
+      textarea?.focus({ preventScroll: true })
+    })
+  }, [onActivate, preserveViewportScroll])
 
   return (
     <div
       className="flex flex-col flex-1 min-w-0 min-h-0"
       style={{ background: '#0d0d0d' }}
-      onMouseDown={onActivate}
+      onMouseDown={handleActivate}
     >
       {/* Pane toolbar */}
       <div

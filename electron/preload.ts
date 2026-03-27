@@ -36,6 +36,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('fs:rename', oldPath, newPath),
   copyFile: (srcPath: string, destPath: string) => ipcRenderer.invoke('fs:copy', srcPath, destPath),
   showInFolder: (targetPath: string) => ipcRenderer.invoke('fs:showInFolder', targetPath),
+  watchFile: (filePath: string) => ipcRenderer.invoke('fs:watch:start', filePath),
+  unwatchFile: (filePath: string) => ipcRenderer.invoke('fs:watch:stop', filePath),
+  onFileChanged: (cb: (filePath: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, filePath: string) => cb(filePath)
+    ipcRenderer.on('fs:file-changed', handler)
+    return () => ipcRenderer.removeListener('fs:file-changed', handler)
+  },
 
   // ─── Session persistence ─────────────────────────────────────────────────
   sessionGetId: () => ipcRenderer.invoke('session:getId'),

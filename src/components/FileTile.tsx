@@ -42,17 +42,41 @@ export default function FileTile({ tile, onFocus }: Props) {
   const [saved, setSaved] = useState(true)
   const [isInteracting, setIsInteracting] = useState(false)
   const valueRef = useRef<string>('')
+  const loadedValueRef = useRef<string>('')
   const { updateTile, removeTile, focusedId } = useTileStore()
   const isFocused = focusedId === tile.id
+
+  const loadFileContent = useCallback(async (filePath: string, { force = false } = {}) => {
+    const data = await window.electronAPI.readFile(filePath)
+    const nextValue = data ?? ''
+    const hasLocalEdits = valueRef.current !== loadedValueRef.current
+
+    if (hasLocalEdits && !force) return
+
+    loadedValueRef.current = nextValue
+    valueRef.current = nextValue
+    setContent(nextValue)
+    setSaved(true)
+  }, [])
 
   // Load file
   useEffect(() => {
     if (!tile.filePath) return
-    window.electronAPI.readFile(tile.filePath).then(data => {
-      setContent(data ?? '')
-      valueRef.current = data ?? ''
+    loadFileContent(tile.filePath, { force: true })
+    window.electronAPI.watchFile(tile.filePath)
+
+    return () => {
+      window.electronAPI.unwatchFile(tile.filePath)
+    }
+  }, [loadFileContent, tile.filePath])
+
+  useEffect(() => {
+    const cleanup = window.electronAPI.onFileChanged((filePath) => {
+      if (!tile.filePath || filePath !== tile.filePath) return
+      loadFileContent(filePath)
     })
-  }, [tile.filePath])
+    return cleanup
+  }, [loadFileContent, tile.filePath])
 
   // Save with Cmd/Ctrl+S
   useEffect(() => {
@@ -60,7 +84,10 @@ export default function FileTile({ tile, onFocus }: Props) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's' && isFocused) {
         e.preventDefault()
         if (tile.filePath) {
-          window.electronAPI.writeFile(tile.filePath, valueRef.current).then(() => setSaved(true))
+          window.electronAPI.writeFile(tile.filePath, valueRef.current).then(() => {
+            loadedValueRef.current = valueRef.current
+            setSaved(true)
+          })
         }
       }
     }
@@ -140,7 +167,12 @@ export default function FileTile({ tile, onFocus }: Props) {
             language={language}
             value={content}
             theme="vs-dark"
-            onChange={val => { valueRef.current = val ?? ''; setSaved(false) }}
+            onChange={val => {
+              const nextValue = val ?? ''
+              valueRef.current = nextValue
+              setContent(nextValue)
+              setSaved(nextValue === loadedValueRef.current)
+            }}
             options={{
               fontSize: 13,
               fontFamily: '"JetBrains Mono", "Cascadia Code", Menlo, monospace',

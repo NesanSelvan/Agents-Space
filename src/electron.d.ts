@@ -20,6 +20,9 @@ declare global {
       renameFile: (oldPath: string, newPath: string) => Promise<void>
       copyFile: (srcPath: string, destPath: string) => Promise<void>
       showInFolder: (targetPath: string) => Promise<void>
+      watchFile: (filePath: string) => Promise<void>
+      unwatchFile: (filePath: string) => Promise<void>
+      onFileChanged: (cb: (filePath: string) => void) => () => void
       // Session persistence
       sessionGetId: () => Promise<string | null>
       sessionLoad: () => Promise<Record<string, unknown> | null>
